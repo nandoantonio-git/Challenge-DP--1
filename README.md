@@ -1,7 +1,7 @@
 
 # Título do projeto
 
-Análise de Consumo e Estoque de Materiais Hospitalares
+Uma ferramenta em Python para calcular consumo diário de insumos, sugerir níveis ideais de estoque (lead time + safety stock) e detectar faltas/excessos automaticamente. 
 
 ## 🚀 Começando
 
