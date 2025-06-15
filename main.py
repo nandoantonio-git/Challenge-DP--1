@@ -1,0 +1,78 @@
+import pandas as pd
+import bisect
+import numpy as np
+
+# 1. Carrega o DataFrame
+df = pd.read_excel('DasaMatHosp.xlsx')
+df['Data e Hora'] = pd.to_datetime(df['Data e Hora'])
+df['dia'] = df['Data e Hora'].dt.date
+
+# 2. Calcula consumo diário por material
+consumo_diario = {}
+for material, grupo in df.sort_values('Data e Hora').groupby('Material'):
+    # Consumo do dia = estoque no início do dia menos estoque no fim do dia (não negativo)
+    consumo = grupo.groupby('dia')['Estoque'].agg(
+        lambda x: max(0, x.iloc[0] - x.iloc[-1])
+    )
+    media = consumo.mean()
+    desvio = consumo.std(ddof=0) if len(consumo) > 1 else 0.0
+    dias = consumo.size
+    consumo_diario[material] = {
+        'media_diaria': round(media, 2),
+        'desvio_diario': round(desvio, 2),
+        'dias_observados': int(dias)
+    }
+
+# 3. Define estoque ideal: lead time de 7 dias + 1 sigma
+lead_time = 7
+fator_seguranca = 1.0
+estoque_ideal = {
+    mat: int(np.ceil(dados['media_diaria'] * lead_time + fator_seguranca * dados['desvio_diario']))
+    for mat, dados in consumo_diario.items()
+}
+
+# 4. Monta dicionário de estoque real (último valor registrado)
+estoque_real = {
+    material: grupo.sort_values('Data e Hora')['Estoque'].iloc[-1]
+    for material, grupo in df.groupby('Material')
+}
+
+# 5. Função para analisar faltas e excessos usando ordenação + busca binária
+def analisar_estoque(real, ideal):
+    """
+    real: dict(material -> qtd_real)
+    ideal: dict(material -> qtd_ideal)
+    Retorna duas listas: (faltando, excedente)
+    """
+    diffs = []
+    materiais = set(real) | set(ideal)
+    for mat in materiais:
+        q_real = real.get(mat, 0)
+        q_ideal = ideal.get(mat, 0)
+        diffs.append((q_real - q_ideal, mat))
+    # Ordena por diferença
+    diffs.sort(key=lambda x: x[0])  # O(N log N)
+    valores = [d for d,_ in diffs]
+    # Encontra índice de separação entre <=0 e >0
+    idx = bisect.bisect_right(valores, 0)  # O(log N)
+    faltando  = [m for d,m in diffs[:idx] if d < 0]
+    excedente = [m for d,m in diffs[idx:] if d > 0]
+    return faltando, excedente
+
+# 6. Executa análise
+faltas, excessos = analisar_estoque(estoque_real, estoque_ideal)
+
+# 7. Exibe resultados
+print("=== Estoque Ideal Calculado ===")
+for mat, qt in estoque_ideal.items():
+    print(f"{mat}: ideal = {qt}")
+
+print("\n=== Estoque Atual ===")
+for mat, qt in estoque_real.items():
+    print(f"{mat}: real  = {qt}")
+
+print("\n=== Itens EM FALTA ===")
+print(faltas)
+
+print("\n=== Itens EM EXCESSO ===")
+print(excessos)
