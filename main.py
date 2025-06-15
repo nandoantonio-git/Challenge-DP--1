@@ -2,15 +2,13 @@ import pandas as pd
 import bisect
 import numpy as np
 
-# 1. Carrega o DataFrame
 df = pd.read_excel('DasaMatHosp.xlsx')
-df['Data e Hora'] = pd.to_datetime(df['Data e Hora'])
+df['Data e Hora'] = pd.to_datetime(df['DataHora'])
 df['dia'] = df['Data e Hora'].dt.date
 
-# 2. Calcula consumo diário por material
 consumo_diario = {}
 for material, grupo in df.sort_values('Data e Hora').groupby('Material'):
-    # Consumo do dia = estoque no início do dia menos estoque no fim do dia (não negativo)
+    
     consumo = grupo.groupby('dia')['Estoque'].agg(
         lambda x: max(0, x.iloc[0] - x.iloc[-1])
     )
@@ -23,7 +21,6 @@ for material, grupo in df.sort_values('Data e Hora').groupby('Material'):
         'dias_observados': int(dias)
     }
 
-# 3. Define estoque ideal: lead time de 7 dias + 1 sigma
 lead_time = 7
 fator_seguranca = 1.0
 estoque_ideal = {
@@ -31,13 +28,11 @@ estoque_ideal = {
     for mat, dados in consumo_diario.items()
 }
 
-# 4. Monta dicionário de estoque real (último valor registrado)
 estoque_real = {
     material: grupo.sort_values('Data e Hora')['Estoque'].iloc[-1]
     for material, grupo in df.groupby('Material')
 }
 
-# 5. Função para analisar faltas e excessos usando ordenação + busca binária
 def analisar_estoque(real, ideal):
     """
     real: dict(material -> qtd_real)
@@ -50,19 +45,17 @@ def analisar_estoque(real, ideal):
         q_real = real.get(mat, 0)
         q_ideal = ideal.get(mat, 0)
         diffs.append((q_real - q_ideal, mat))
-    # Ordena por diferença
-    diffs.sort(key=lambda x: x[0])  # O(N log N)
+    
+    diffs.sort(key=lambda x: x[0])  
     valores = [d for d,_ in diffs]
-    # Encontra índice de separação entre <=0 e >0
-    idx = bisect.bisect_right(valores, 0)  # O(log N)
+   
+    idx = bisect.bisect_right(valores, 0) 
     faltando  = [m for d,m in diffs[:idx] if d < 0]
     excedente = [m for d,m in diffs[idx:] if d > 0]
     return faltando, excedente
 
-# 6. Executa análise
 faltas, excessos = analisar_estoque(estoque_real, estoque_ideal)
 
-# 7. Exibe resultados
 print("=== Estoque Ideal Calculado ===")
 for mat, qt in estoque_ideal.items():
     print(f"{mat}: ideal = {qt}")
